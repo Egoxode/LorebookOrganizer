@@ -1,3 +1,8 @@
+if __name__ == "__main__":
+    # First of all: errors from here on (even a missing PySide6) go to error.log and a message box
+    import error_log
+    error_log.install("Lorebook Organizer")
+
 import copy
 import json
 import os
@@ -6,7 +11,7 @@ import tempfile
 from pathlib import Path
 
 import shiboken6
-from PySide6.QtCore import Qt, Signal, QMimeData, QItemSelectionModel, QEvent, QTimer
+from PySide6.QtCore import Qt, Signal, QItemSelectionModel, QEvent, QTimer
 from PySide6.QtGui import QDrag, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -26,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 
-VERSION = "1.0.4"
+VERSION = "1.0.7"
 HISTORY_LIMIT = 100
 
 THEME = """
@@ -195,7 +200,7 @@ def entries_to_list(raw):
 
     def sort_key(item):
         k, e = item
-        if k.isdigit():
+        if k.isascii() and k.isdecimal():  # isdigit() пропускает "²", на котором int() падает
             return (0, int(k))
         uid = e.get("uid", e.get("id"))
         try:
@@ -273,21 +278,21 @@ def shift_entries(entries, selected, direction):
         return list(entries), list(selected)
     n = len(entries)
     selected = sorted({i for i in selected if 0 <= i < n})
+    selected_set = set(selected)
     result = list(entries)
 
     if direction == "top":
         picked = [result[i] for i in selected]
-        rest = [e for i, e in enumerate(result) if i not in set(selected)]
+        rest = [e for i, e in enumerate(result) if i not in selected_set]
         result = picked + rest
         return result, list(range(len(picked)))
 
     if direction == "bottom":
         picked = [result[i] for i in selected]
-        rest = [e for i, e in enumerate(result) if i not in set(selected)]
+        rest = [e for i, e in enumerate(result) if i not in selected_set]
         result = rest + picked
         return result, list(range(len(rest), len(result)))
 
-    selected_set = set(selected)
     if direction < 0:
         i = 1
         while i < n:
@@ -318,7 +323,8 @@ def move_entries_to(entries, selected, target):
     if target > n:
         target = n
     picked = [entries[i] for i in selected]
-    rest = [e for i, e in enumerate(entries) if i not in set(selected)]
+    chosen = set(selected)
+    rest = [e for i, e in enumerate(entries) if i not in chosen]
     before = sum(1 for i in selected if i < target)
     insert_at = target - before
     if insert_at < 0:
@@ -726,22 +732,29 @@ class Organizer(QMainWindow):
                 return True
         return super().eventFilter(obj, event)
 
-    def open_file(self, path=None):
-        """Open (path=None — выбрать файл в окне) или файл, брошенный в окно."""
+    def confirm_unsaved(self, action):
+        """Вопрос о несохранённых правках перед открытием другого файла или закрытием.
+        False — отмена (Cancel или окно сохранения закрыто без сохранения)."""
         if self.dirty:
             r = QMessageBox.question(
                 self,
                 "Unsaved Changes",
-                "Save changes before opening another file?",
+                f"Save changes before {action}?",
                 QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
                 QMessageBox.Yes,
             )
             if r == QMessageBox.Cancel:
-                return
+                return False
             if r == QMessageBox.Yes:
                 self.save_file()
                 if self.dirty:
-                    return
+                    return False
+        return True
+
+    def open_file(self, path=None):
+        """Open (path=None — выбрать файл в окне) или файл, брошенный в окно."""
+        if not self.confirm_unsaved("opening another file"):
+            return
 
         if not path:
             path, _ = QFileDialog.getOpenFileName(self, "Open", "", "JSON (*.json)")
@@ -775,6 +788,8 @@ class Organizer(QMainWindow):
         self.history.clear()
         self.future.clear()
         self.mark_saved()
+        # Номера выделенных строк старого файла к новому не относятся: refresh() не должен их выделить.
+        self.list.clearSelection()
         self.clear_filter()
 
     def save_file(self):
@@ -794,7 +809,7 @@ class Organizer(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Save", suggested, "JSON (*.json)")
         if not path:
             return
-        if not Path(path).suffix:
+        if Path(path).suffix.lower() != ".json":  # "my.book" -> "my.book.json"
             path += ".json"
         try:
             save_json(path, payload)
@@ -807,26 +822,10 @@ class Organizer(QMainWindow):
         self.mark_saved()
 
     def closeEvent(self, event):
-        if not self.dirty:
+        if self.confirm_unsaved("closing"):
             event.accept()
-            return
-        r = QMessageBox.question(
-            self,
-            "Unsaved Changes",
-            "Save changes before closing?",
-            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
-            QMessageBox.Yes,
-        )
-        if r == QMessageBox.Cancel:
-            event.ignore()
-        elif r == QMessageBox.Yes:
-            self.save_file()
-            if not self.dirty:
-                event.accept()
-            else:
-                event.ignore()
         else:
-            event.accept()
+            event.ignore()
 
 
 if __name__ == "__main__":

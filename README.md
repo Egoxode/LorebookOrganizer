@@ -2,7 +2,7 @@
 
 Desktop tool for reordering entries in SillyTavern lorebook JSON files.
 
-Version **1.0.4** ([changelog](CHANGELOG.md))
+Version **1.0.7** ([changelog](CHANGELOG.md))
 
 Lorebook Organizer changes only the order of entries. It does not edit text. You can freely use, copy, and modify this program.
 
@@ -106,7 +106,7 @@ py main.py
 
 ### Run without a console window (Windows)
 
-Double-click `LorebookOrganizer.pyw`. The program opens without the black console window. If something goes wrong, the error is shown in a message box and written to `error.log` next to the program.
+Double-click `LorebookOrganizer.pyw`. The program opens without the black console window. If something goes wrong, the error is shown in a message box and written to `error.log` next to the program. The same happens when you start the program with `python main.py` (or double-click `main.py`): errors are written to `error.log` and shown in a message box, and also printed in the console.
 
 ## Keyboard shortcuts
 
